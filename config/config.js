@@ -4,7 +4,7 @@ require('dotenv').config();
 const webhooks = require('./twitchwebhooks.js');
 
 const config = {
-  'isProduction': process.env.NODE_ENV === 'production',
+  'environment': process.env.NODE_ENV,
   'username': process.env.TWITCH_USERNAME,
   'client_id': process.env.CLIENT_ID,
   'client_secret': process.env.CLIENT_SECRET,
