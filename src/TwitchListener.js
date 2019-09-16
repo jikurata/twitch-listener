@@ -138,9 +138,11 @@ class TwitchListener extends EventEmitter {
           res.send(req.query['hub.challenge']);
           if ( req.query['hub.mode'] === 'subscribe' ) {
             console.log(`Added webhook for ${topic}`);
+            this.emit(`open_${topic}`)
           }
           if ( req.query['hub.mode'] === 'unsubscribe' ) {
             console.log(`Removed webhook for ${topic}`);
+            this.emit(`close_${topic}`)
           }
         }
 
@@ -149,7 +151,14 @@ class TwitchListener extends EventEmitter {
 
       // Endpoint to handle incoming Webhook Requests
       this.app.post('/' + topic, (req, res) => {
-
+        let body = null;
+        try {
+          body = JSON.parse(res.body);
+        }
+        catch(err) { 
+          console.error(err);
+        }
+        this.emit(topic, body);
         res.status(200).end();
       });
 
