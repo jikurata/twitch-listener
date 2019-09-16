@@ -3,13 +3,13 @@ const Taste = require('@jikurata/taste');
 const TwitchListener = require('../src/TwitchListener.js');
 
 const config = require('../config/config.js');
+// TODO: Move configurations into separate file
 config.environment = 'test';
 config.webhook_duration = 0;
 
-// TODO: Move configurations into separate file
 const fsTestConfig = {};
   Object.keys(config).forEach(key => fsTestConfig[key] = config[key]);
-  fsTestConfig.token_path = 'test/cred.json';
+  fsTestConfig.token_path = 'test/test.json';
   
 const appTokenTestConfig = {}
 Object.keys(config).forEach(key => appTokenTestConfig[key] = config[key]);
@@ -84,3 +84,4 @@ appTokenTestConfig.token_path = 'test/cred.json';
   .expect('validAccessToken').toBeTruthy()
   .expect('revokeAccessToken').toBeTruthy();
 // =====
+

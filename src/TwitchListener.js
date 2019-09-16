@@ -3,9 +3,11 @@ const EventEmitter = require('events');
 const bodyParser = require('body-parser');
 const express = require('express');
 const Request = require('request');
+const crypto = require('crypto');
 const FS = require('fs');
 const HTTP = require('http');
 const PATH = require('path');
+const URL = require('url');
 const init = Symbol('init');
 
 class TwitchListener extends EventEmitter {
@@ -19,6 +21,12 @@ class TwitchListener extends EventEmitter {
     });
     Object.defineProperty(this, 'server', {
       value: HTTP.createServer(this.app),
+      enumerable: true,
+      writable: false,
+      configurable: false
+    });
+    Object.defineProperty(this, 'port', {
+      value: config.port || 3000,
       enumerable: true,
       writable: false,
       configurable: false
@@ -102,8 +110,8 @@ class TwitchListener extends EventEmitter {
     if ( !this.hub_secret ) {
       throw new Error(`A secret must be provided to verify twitch signatures`);
     }
-    if ( !this.webhook_duration ) {
-      throw new Error('Webhook duration must be provided. Add a value to WEBHOOK_DURATION in .env');
+    if ( this.webhook_duration < 0 ) {
+      throw new Error('Webhook duration must be between 0 and 86400. Add a value to WEBHOOK_DURATION in .env');
     }
     if ( !this.callback_url ) {
       throw new Error('A callback url must be provided for Twitch to send webhook updates to');
@@ -121,53 +129,65 @@ class TwitchListener extends EventEmitter {
       'extended': true
     }));
 
-    if ( this.environment !== 'production' ) {
-      // Debug request contents
+    if ( this.enivironment !== 'production' ) {
       this.app.use((req, res, next) => {
-        console.log('body', req.body);
         next();
       });
     }
+
+    // Validate incoming requests to ensure they are coming from Twitch
+    this.app.post('*', (req, res, next) => {
+      const header = req.headers['x-hub-signature'];
+      if ( header ) {
+        const signature = header.split('=')[0];
+        const hash = crypto.createHmac(incoming[0], secret)
+        .update(JSON.stringify(req.body))
+        .digest('hex');
+
+        if ( signature === hash ) {
+          console.log('valid request');
+          return next();
+        }
+      }
+      next();
+      // Reject invalidated requests
+      //res.status(401).end();
+    });
     
     Object.keys(this.webhook_endpoints).forEach(topic => {
-      // Endpoint to handle incoming Twitch Challenge Requests
-      this.app.get('/' + topic, (req, res) => {
-        // Determine if the incoming request is a webhook challenge
-        if ( req.query && req.query['hub.challenge'] ) {
-          // Once the Twitch API receives the response, the webhook will be active
-          res.send(req.query['hub.challenge']);
-          if ( req.query['hub.mode'] === 'subscribe' ) {
-            console.log(`Added webhook for ${topic}`);
-            this.emit(`open_${topic}`)
+      ((topic) => {
+        const route = '/' + topic.toLowerCase();
+        // Endpoint to handle incoming Twitch Challenge Requests
+        this.app.get(route, (req, res) => {
+          // Determine if the incoming request is a webhook challenge
+          if ( req.query && req.query['hub.challenge'] ) {
+            // Once the Twitch API receives the response, the webhook will be active
+            res.send(req.query['hub.challenge']);
+            if ( req.query['hub.mode'] === 'subscribe' ) {
+              console.log(`Added webhook for ${topic}`);
+              this.emit(`open_${topic}`)
+            }
+            if ( req.query['hub.mode'] === 'unsubscribe' ) {
+              console.log(`Removed webhook for ${topic}`);
+              this.emit(`close_${topic}`)
+            }
           }
-          if ( req.query['hub.mode'] === 'unsubscribe' ) {
-            console.log(`Removed webhook for ${topic}`);
-            this.emit(`close_${topic}`)
-          }
-        }
+  
+          res.status(200).end();
+        });
+  
+        // Endpoint to handle incoming Webhook Requests
+        this.app.post(route, (req, res) => {
+          this.emit(topic, req.body);
+          res.status(200).end();
+        });
+      })(topic);
+    });
 
-        res.status(200).end();
-      });
-
-      // Endpoint to handle incoming Webhook Requests
-      this.app.post('/' + topic, (req, res) => {
-        let body = null;
-        try {
-          body = JSON.parse(res.body);
-        }
-        catch(err) { 
-          console.error(err);
-        }
-        this.emit(topic, body);
-        res.status(200).end();
-      });
-
-      // 404 all invalid requests
-      this.app.use('*', (req, res) => {
-        res.status(404).end();
-      });
-    })
-
+    // 404 all invalid requests
+    this.app.use('*', (req, res) => {
+      res.status(404).end();
+    });
   }
 
   /**
@@ -184,8 +204,12 @@ class TwitchListener extends EventEmitter {
           return reject(err);
         }
         console.log(`Twitch Listener ready at port ${port}`);
-        this.emit('ready');
-        return resolve();
+        
+        this.createWebhooks()
+        .then(() => {
+          this.emit('ready');
+          resolve();
+        });
       });
     })
     .catch(err => {
@@ -194,8 +218,41 @@ class TwitchListener extends EventEmitter {
     });
   }
 
+  /**
+   * Subscribes to all webhooks available.
+   * @returns {Promise}
+   */
+  createWebhooks() {
+    const webhooks = [
+      this.followWebhook(),
+      this.subscriptionWebhook(),
+      this.profileChangeWebhook(),
+      this.streamChangeWebhook(),
+      this.extensionTransactionWebhook(),
+      this.moderatorChangeWebhook(),
+      this.banChangeWebhook()
+    ];
+    return new Promise((resolve, reject) => {
+      let done = 0;
+      for ( let i = 0; i < webhooks.length; ++i ) {
+        webhooks[i]
+        .then(() => {
+          if ( ++done  >= webhooks.length ) {
+            resolve();
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          if ( ++done  >= webhooks.length ) {
+            resolve();
+          }
+        })
+      }
+    })
+  }
+
   webhook(topic, options = {}) {
-    const callback = `${this.callback_url}/${topic}`;
+    const callback = URL.format(`${this.callback_url}/${topic.toLowerCase()}`);
     const topicUrl = this.webhook_endpoints[topic];
     const query = (options.query) ? options.query : '';
     const fullTopicUrl = `${topicUrl}${query}`;
@@ -205,7 +262,6 @@ class TwitchListener extends EventEmitter {
       'Content-Type': 'application/json'
     };
 
-    console.log(callback);
     // Add additional headers if available
     if ( options.headers && typeof options.headers === 'object' ) {
       Object.keys(options.headers).forEach(field => {
@@ -213,7 +269,14 @@ class TwitchListener extends EventEmitter {
       });
     }
 
-    console.log(fullTopicUrl);
+    const body = JSON.stringify({
+      'hub.callback': callback,
+      'hub.mode': mode,
+      'hub.topic': fullTopicUrl,
+      'hub.lease_seconds': this.webhook_duration,
+      'secret': this.hub_secret
+    });
+
     return new Promise((resolve, reject) => {
       if ( !this.webhook_endpoints.hasOwnProperty(topic) ) {
         return reject(new Error(`${topic} is not a valid hub topic. Review config/twitchwebhooks.js for the valid hub topics`));
@@ -244,19 +307,16 @@ class TwitchListener extends EventEmitter {
         url: 'https://api.twitch.tv/helix/webhooks/hub',
         method: 'POST',
         headers: header,
-        body: JSON.stringify({
-          'hub.callback': callback,
-          'hub.mode': mode,
-          'hub.topic': fullTopicUrl,
-          'hub.lease_seconds': this.webhook_duration,
-          'secret': this.hub_secret
-        })
+        body: body
       }))
       .then(res => {
         if ( res.statusCode !== 202 ) {
           return reject(res.body);
         }
-        else resolve();
+        else {
+          console.log(`Requesting webhook ${mode} for ${topic}`);
+          resolve();
+        }
       })
       .catch(err => reject(err));
     });
@@ -277,21 +337,41 @@ class TwitchListener extends EventEmitter {
   }
 
   subscriptionWebhook(mode = 'subscribe') {
-    return this.requestUserInfo()
-    .then(info => {
-      const id = info.id;
+    return Promise.all([
+      this.requestUserInfo(),
+      this.requestAccessToken()
+    ])
+    .then(results => {
+      const id = results[0].id;
       return this.webhook('subscription', {
         mode: mode,
+        header: {
+          'Authorization': `Bearer ${results[1]}`
+        },
         query: `?broadcaster_id=${id}&first=1`
       });
     });
   }
 
-  streamChangeWebhook() {
+  profileChangeWebhook(mode = 'subscribe') {
     return this.requestUserInfo()
     .then(info => {
       const id = info.id
-      return this.webhook('changeStream', `?user_id=${id}`);
+      return this.webhook('changeProfile', {
+        mode: mode,
+        query: `?id=${id}`
+      });
+    });
+  }
+
+  streamChangeWebhook(mode = 'subscribe') {
+    return this.requestUserInfo()
+    .then(info => {
+      const id = info.id
+      return this.webhook('changeStream', {
+        mode: mode,
+        query: `?user_id=${id}`
+      });
     });
   }
 
@@ -309,7 +389,7 @@ class TwitchListener extends EventEmitter {
     });
   }
 
-  banChangewebhook() {
+  banChangeWebhook() {
     return new Promise((resolve, reject) => {
       console.warn('subscribeToBanChange is not yet implemented');
       resolve();
@@ -429,7 +509,6 @@ class TwitchListener extends EventEmitter {
       }))
       .then(res => {
         try {
-          console.log(res.body);
           return resolve(JSON.parse(res.body));
         }
         catch(err) {
