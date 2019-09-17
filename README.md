@@ -7,25 +7,25 @@ Create and listen to Twtich webhooks
 const TwitchListener = require('./src/TwitchListener.js');
 const config = require('./config/config.js');
 
-const TL = new TwitchListener(config);
+const listener = new TwitchListener(config);
 
 // Listen to the user follow webhook event
-TL.on('follow', (data) => {
+listener.on('follow', (data) => {
     // Do stuff with follow data
 });
 
 // Listen to the user stream change webhook event
-TL.on('changeStream', (data) => {
+listener.on('changeStream', (data) => {
     // Do stuff with stream data
 });
 
 // Listen to the user profile change webhook event
-TL.on('changeProfile', (data) => {
+listener.on('changeProfile', (data) => {
     // Do stuff with profile data
 });
 
 // Start the application
-TL.launch();
+listener.launch();
 ```
 ## Setup
 ---
@@ -44,7 +44,7 @@ npm install
     - PORT: Port for the server to listen to
     - TOKEN_PATH: A filepath to store a retrieved app access token
     - WEBHOOK_DURATION: Webhook subscription duration (Max 86400 seconds)
-    - WEBHOOK_CALLBACK: Your server endpoint to receive Twitch requests
+    - WEBHOOK_CALLBACK: Your server endpoint to receive Twitch webhook requests
 
 Example .env file:
 ```
