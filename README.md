@@ -58,7 +58,8 @@ TOKEN_PATH=cred.json
 WEBHOOK_DURATION=86400
 WEBHOOK_CALLBACK=http://127.0.0.1:3000/
 ```
-5. To launch the server
+5. Edit the event listeners in app.js as needed
+6. To launch the server
 ```
 npm run launch
 ```
