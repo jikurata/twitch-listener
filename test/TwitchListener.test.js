@@ -103,7 +103,7 @@ webhookTestListener.launch()
   .test(() => {
     webhookTestListener.on('add_webhook_changeStream', () => {
       Taste.profile.webhookChangeStreamAddResult = true;
-      webhookTestListener.changeStreamWebhook('unsubscribe');
+      webhookTestListener.streamChangeWebhook('unsubscribe');
     });
     webhookTestListener.on('remove_webhook_changeStream', () => {
       Taste.profile.webhookChangeStreamRemoveResult = true;

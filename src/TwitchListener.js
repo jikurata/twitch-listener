@@ -238,8 +238,8 @@ class TwitchListener extends EventEmitter {
       .then(token => {
         const webhooks = [
           this.followWebhook(),
-          this.profileChangeWebhook(),
-          this.streamChangeWebhook()
+          this.changeProfileWebhook(),
+          this.changeStreamWebhook()
         ];
         let done = 0;
         for ( let i = 0; i < webhooks.length; ++i ) {
@@ -381,7 +381,7 @@ class TwitchListener extends EventEmitter {
     });
   }
 
-  profileChangeWebhook(mode = 'subscribe') {
+  changeProfileWebhook(mode = 'subscribe') {
     return this.requestUserInfo()
     .then(info => {
       const id = info.id
@@ -392,7 +392,7 @@ class TwitchListener extends EventEmitter {
     });
   }
 
-  streamChangeWebhook(mode = 'subscribe') {
+  changeStreamWebhook(mode = 'subscribe') {
     return this.requestUserInfo()
     .then(info => {
       const id = info.id
