@@ -1,6 +1,8 @@
 #TwitchListener v0.0.0
+---
 Create and listen to Twtich webhooks
 ## Usage
+---
 ```
 const TwitchListener = require('./src/TwitchListener.js');
 const config = require('./config/config.js');
@@ -74,3 +76,19 @@ If you do not already have a Twitch application to attach to this module, then f
 9. Retrieve the client id.
 10. Click on New Secret. Retrieve the secret. Do not ever expose this to the public.
 11. Store those two credentials in your .env file.
+
+## Current Implementation
+---
+In the current version, I mistakenly developed the module around Application Access Tokens.
+I found in hindsight, that these types of tokens are only useful for retrieving public information from Twitch's API. Therefore, only webhooks that access public information are currently supported. These are:
+1. User follow events
+2. User profile change events
+3. User stream change events
+
+In the next version, there will be User Access Token support, which allows the client application to access private data from an authorized user.
+
+## Test
+---
+```
+npm run test
+```
