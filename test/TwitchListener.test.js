@@ -1,24 +1,7 @@
 'use strict';
 const Taste = require('@jikurata/taste');
 const TwitchListener = require('../src/TwitchListener.js');
-
-const config = require('../config/config.js');
-// TODO: Move configurations into separate file
-config.environment = 'test';
-config.webhook_duration = 0;
-
-const fsTestConfig = {};
-  Object.keys(config).forEach(key => fsTestConfig[key] = config[key]);
-  fsTestConfig.token_path = 'test/test.json';
-  
-const appTokenTestConfig = {}
-Object.keys(config).forEach(key => appTokenTestConfig[key] = config[key]);
-appTokenTestConfig.token_path = 'test/token.json';
-
-const subscriptionTestConfig = {}
-Object.keys(config).forEach(key => subscriptionTestConfig[key] = config[key]);
-subscriptionTestConfig.token_path = 'test/cred.json';
-subscriptionTestConfig.webhook_duration = 60;
+const {testConfigFS, testConfigAccessToken, testConfigWebhook} = require('../config/test-config.js');
 
 // FS Unit Tests
   Taste.flavor('Writes a token object to test.json')
@@ -30,7 +13,7 @@ subscriptionTestConfig.webhook_duration = 60;
       "scope":["openid"],
       "token_type":"bearer"
     };
-    const listener = new TwitchListener(fsTestConfig);
+    const listener = new TwitchListener(testConfigFS);
     Taste.profile.saveAccessTokenTest = listener.saveAccessToken(token);
   })
   .expect('saveAccessTokenTest').toBeTruthy();
@@ -38,41 +21,17 @@ subscriptionTestConfig.webhook_duration = 60;
   Taste.flavor('Reads the contents of test.json')
   .describe('Returns the token as a json object')
   .test(() => {
-    const listener = new TwitchListener(fsTestConfig);
+    const listener = new TwitchListener(testConfigFS);
     Taste.profile.readAccessTokenTest = listener.readAccessToken();
   })
   .expect('readAccessTokenTest').toBeTruthy();
-// =====
-
-// Twitch API user info request test
-  Taste.flavor('Request user info based on the username provided in config')
-  .describe('Returns an object containing various details about the user')
-  .test(() => {
-    const listener = new TwitchListener(config);
-    listener.requestUserInfo()
-    .then(info => Taste.profile.userProfileTest = info.id)
-    .catch(err => Taste.profile.userProfileTest = err);
-  })
-  .expect('userProfileTest').isTypeOf('string');
-// =====
-
-// Twitch API active webhooks request test
-  Taste.flavor('Request the current active webhooks for an application')
-  .describe('Returns an object containing information about the webhooks')
-  .test(() => {
-    const listener = new TwitchListener(config)
-    listener.requestActiveWebhooks()
-    .then(info => Taste.profile.activeWebhooksTest = info.total)
-    .catch(err => Taste.profile.activeWebhooksTest = err);
-  })
-  .expect('activeWebhooksTest').isTypeOf('number');
 // =====
 
 // Twitch app access token test
   Taste.flavor('Request an app access token from the Twitch API')
   .describe('Returns an app access token as a string')
   .test(() => {
-    const listener = new TwitchListener(appTokenTestConfig);
+    const listener = new TwitchListener(testConfigAccessToken);
     listener.requestAccessToken()
     .then(token => {
       Taste.profile.receivedAccessToken = token;
@@ -90,8 +49,31 @@ subscriptionTestConfig.webhook_duration = 60;
   .expect('revokeAccessToken').toBeTruthy();
 // =====
 
+// Twitch API user info request test
+  Taste.flavor('Request user info based on the username provided in config')
+  .describe('Returns an object containing various details about the user')
+  .test(() => {
+    const listener = new TwitchListener(testConfigAccessToken);
+    listener.requestUserInfo()
+    .then(info => Taste.profile.userProfileTest = info.id)
+    .catch(err => Taste.profile.userProfileTest = err);
+  })
+  .expect('userProfileTest').isTypeOf('string');
+// =====
 
-const webhookTestListener = new TwitchListener(subscriptionTestConfig)
+// Twitch API active webhooks request test
+  Taste.flavor('Request the current active webhooks for an application')
+  .describe('Returns an object containing information about the webhooks')
+  .test(() => {
+    const listener = new TwitchListener(testConfigAccessToken)
+    listener.requestActiveWebhooks()
+    .then(info => Taste.profile.activeWebhooksTest = info.total)
+    .catch(err => Taste.profile.activeWebhooksTest = err);
+  })
+  .expect('activeWebhooksTest').isTypeOf('number');
+// =====
+
+const webhookTestListener = new TwitchListener(testConfigWebhook)
 webhookTestListener.launch()
 .then(() => {
   // Twitch follow webhook test
