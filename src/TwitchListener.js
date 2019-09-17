@@ -201,12 +201,17 @@ class TwitchListener extends EventEmitter {
         }
         console.log(`Twitch Listener ready at port ${this.port}`);
         
-        // Create all supported webhooks
-        this.createWebhooks()
-        .then(() => {
-          this.emit('ready');
-          resolve();
-        });
+        if ( this.environment !== 'test' ) {
+          // Create all supported webhooks
+          this.createWebhooks()
+          .then(() => {
+            this.emit('ready');
+            resolve();
+          });
+        }
+        else {
+          return resolve();
+        }
       });
     })
     .catch(err => {
