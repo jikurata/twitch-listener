@@ -128,7 +128,6 @@ webhookTestListener.launch()
     });
     webhookTestListener.on('remove_webhook_changeProfile', () => {
       Taste.profile.webhookChangeProfileRemoveResult = true;
-      webhookTestListener.close();
     });
     webhookTestListener.changeProfileWebhook()
     .catch(err => {

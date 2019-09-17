@@ -600,20 +600,26 @@ class TwitchListener extends EventEmitter {
    * Rejects with an error
    */
   validateAccessToken(token) {
-    // If the argument passed is an object, assume the object is an oauth2 access token object
-    if ( token && typeof token === 'object') {
-      token = token.access_token;
-    }
-    return this.request({
-      url: 'https://id.twitch.tv/oauth2/validate',
-      method: 'GET',
-      headers: {
-        'Authorization': `OAuth ${token}`
+    return new Promise((resolve, reject) => {
+      if ( !token ) {
+        return resolve(false);
       }
-    })
-    .then(res => {
-      // if the response body contains client_id, it is a valid token
-      return res.body.match('client_id');
+      // If the argument passed is an object, assume the object is an oauth2 access token object
+      if ( token && typeof token === 'object') {
+        token = token.access_token;
+      }
+      this.request({
+        url: 'https://id.twitch.tv/oauth2/validate',
+        method: 'GET',
+        headers: {
+          'Authorization': `OAuth ${token}`
+        }
+      })
+      .then(res => {
+        // if the response body contains client_id, it is a valid token
+        resolve(res.body.match('client_id'));
+      })
+      .catch(err => reject(err));
     });
   }
 
