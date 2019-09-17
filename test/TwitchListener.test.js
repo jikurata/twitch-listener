@@ -13,7 +13,12 @@ const fsTestConfig = {};
   
 const appTokenTestConfig = {}
 Object.keys(config).forEach(key => appTokenTestConfig[key] = config[key]);
-appTokenTestConfig.token_path = 'test/cred.json';
+appTokenTestConfig.token_path = 'test/token.json';
+
+const subscriptionTestConfig = {}
+Object.keys(config).forEach(key => subscriptionTestConfig[key] = config[key]);
+subscriptionTestConfig.token_path = 'test/cred.json';
+subscriptionTestConfig.webhook_duration = 60;
 
 // FS Unit Tests
   Taste.flavor('Writes a token object to test.json')
@@ -85,3 +90,26 @@ appTokenTestConfig.token_path = 'test/cred.json';
   .expect('revokeAccessToken').toBeTruthy();
 // =====
 
+// Twitch webhook test
+  Taste.flavor('Register and unregister a follow webhook')
+  .describe('Request to create a webhook on the user/follow api')
+  .test(() => {
+    const listener = new TwitchListener(subscriptionTestConfig)
+    listener.on('add_webhook_follow', () => {
+      Taste.profile.webhookAddResult = true;
+      listener.followWebhook('unsubscribe');
+    });
+    listener.on('remove_webhook_follow', () => {
+      Taste.profile.webhookRemoveResult = true;
+      listener.close();
+    });
+    listener.launch()
+    .then(() => listener.followWebhook())
+    .catch(err => {
+      Taste.profile.webhookAddResult = err;
+      Taste.profile.webhookRemoveResult = err;
+    });
+  })
+  .expect('webhookAddResult').toBe(true)
+  .expect('webhookRemoveResult').toBe(true);
+// =====

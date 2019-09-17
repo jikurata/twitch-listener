@@ -1,5 +1,30 @@
 #TwitchListener v0.0.0
-Establish Twitch webhooks and subscribe TwitchListener events
+Create and listen to Twtich webhooks
+##Usage
+```
+const TwitchListener = require('./src/TwitchListener.js');
+const config = require('./config/config.js');
+
+const TL = new TwitchListener(config);
+
+// Listen to the user follow webhook event
+TL.on('follow', (data) => {
+    // Do stuff with follow data
+});
+
+// Listen to the user stream change webhook event
+TL.on('changeStream', (data) => {
+    // Do stuff with stream data
+});
+
+// Listen to the user profile change webhook event
+TL.on('changeProfile', (data) => {
+    // Do stuff with profile data
+});
+
+// Start the application
+TL.launch();
+```
 ## Setup
 ---
 1. Download this repo
@@ -7,7 +32,8 @@ Establish Twitch webhooks and subscribe TwitchListener events
 ```
 npm install
 ```
-3. Create a .env file
+3. Create and register a client application through the Twitch console (More information below)
+4. Create a .env file
     - NODE_ENV: Project environment (development, production, etc)
     - TWITCH_USERNAME: Your twitch username
     - CLIENT_ID: Your registered application id (More details below)
@@ -30,21 +56,21 @@ TOKEN_PATH=cred.json
 WEBHOOK_DURATION=86400
 WEBHOOK_CALLBACK=http://127.0.0.1:3000/
 ```
-4. To launch the server
+5. To launch the server
 ```
 npm run launch
 ```
-##Usage
-```
-const TwitchListener = require('./src/TwitchListener.js');
-const config = require('./config/config.js');
-
-const listener = new TwitchListener(config);
-
-// Start the server
-listener.launch()
-.then() => {
-    this.listenToFollow();
-})
-
-
+## Registering a client application
+---
+If you do not already have a Twitch application to attach to this module, then follow these steps:
+1. Login to https://dev.twitch.tv/ and go to https://dev.twitch.tv/console
+2. In the navigation, go to the Applications tab.
+3. Click on Register your Application
+4. Give the application a unique name (It usually helps to append random numbers to the name)
+5. This application currently only supprots Application Access Tokens, so an Oauth redirect url is not currently required
+6. Select the appropriate category for your application.
+7. Create.
+8. If it does not automatically route you to the new application configuration, then go back to the Applications tab. You should now see your application in the list. Click Manage.
+9. Retrieve the client id.
+10. Click on New Secret. Retrieve the secret. Do not ever expose this to the public.
+11. Store those two credentials in your .env file.

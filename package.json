@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "revokeToken": "node ./script/revoke-token.js",
     "test": "node ./test/TwitchListener.test.js",
     "launch": "node app.js"
   },

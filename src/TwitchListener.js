@@ -7,7 +7,6 @@ const crypto = require('crypto');
 const FS = require('fs');
 const HTTP = require('http');
 const PATH = require('path');
-const URL = require('url');
 const init = Symbol('init');
 
 class TwitchListener extends EventEmitter {
@@ -139,19 +138,17 @@ class TwitchListener extends EventEmitter {
     this.app.post('*', (req, res, next) => {
       const header = req.headers['x-hub-signature'];
       if ( header ) {
-        const signature = header.split('=')[0];
-        const hash = crypto.createHmac(incoming[0], secret)
+        const signature = header.split('=');
+        const hash = crypto.createHmac(signature[0], this.hub_secret)
         .update(JSON.stringify(req.body))
         .digest('hex');
 
-        if ( signature === hash ) {
-          console.log('valid request');
+        if ( signature[1] === hash ) {
           return next();
         }
       }
-      next();
       // Reject invalidated requests
-      //res.status(401).end();
+      res.status(401).end();
     });
     
     Object.keys(this.webhook_endpoints).forEach(topic => {
@@ -165,11 +162,11 @@ class TwitchListener extends EventEmitter {
             res.send(req.query['hub.challenge']);
             if ( req.query['hub.mode'] === 'subscribe' ) {
               console.log(`Added webhook for ${topic}`);
-              this.emit(`open_${topic}`)
+              this.emit(`add_webhook_${topic}`)
             }
             if ( req.query['hub.mode'] === 'unsubscribe' ) {
               console.log(`Removed webhook for ${topic}`);
-              this.emit(`close_${topic}`)
+              this.emit(`remove_webhook_${topic}`)
             }
           }
   
@@ -194,17 +191,17 @@ class TwitchListener extends EventEmitter {
    * Attempts to start a http server at the provided port
    * Will resolve if successful and emit a ready event
    * Otherwise rejects the promise
-   * @param {Number} port 
    * @returns {Promise}
    */
-  launch(port) {
+  launch() {
     return new Promise((resolve, reject) => {
-      this.server.listen(port, (err) => {
+      this.server.listen(this.port, (err) => {
         if ( err ) {
           return reject(err);
         }
-        console.log(`Twitch Listener ready at port ${port}`);
+        console.log(`Twitch Listener ready at port ${this.port}`);
         
+        // Create all supported webhooks
         this.createWebhooks()
         .then(() => {
           this.emit('ready');
@@ -219,40 +216,61 @@ class TwitchListener extends EventEmitter {
   }
 
   /**
+   * Closes the server
+   * @returns {Promise}
+   */
+  close() {
+    return this.server.close()
+  }
+
+  /**
    * Subscribes to all webhooks available.
    * @returns {Promise}
    */
   createWebhooks() {
-    const webhooks = [
-      this.followWebhook(),
-      this.subscriptionWebhook(),
-      this.profileChangeWebhook(),
-      this.streamChangeWebhook(),
-      this.extensionTransactionWebhook(),
-      this.moderatorChangeWebhook(),
-      this.banChangeWebhook()
-    ];
     return new Promise((resolve, reject) => {
-      let done = 0;
-      for ( let i = 0; i < webhooks.length; ++i ) {
-        webhooks[i]
-        .then(() => {
-          if ( ++done  >= webhooks.length ) {
-            resolve();
-          }
-        })
-        .catch(err => {
-          console.error(err);
-          if ( ++done  >= webhooks.length ) {
-            resolve();
-          }
-        })
-      }
+      this.requestAccessToken()
+      .then(token => {
+        const webhooks = [
+          this.followWebhook(),
+          this.profileChangeWebhook(),
+          this.streamChangeWebhook()
+        ];
+        let done = 0;
+        for ( let i = 0; i < webhooks.length; ++i ) {
+          webhooks[i]
+          .then(() => {
+            if ( ++done  >= webhooks.length ) {
+              resolve();
+            }
+          })
+          .catch(err => {
+            console.error(err);
+            if ( ++done  >= webhooks.length ) {
+              resolve();
+            }
+          });
+        }
+      })
+      .catch(err => reject(err));
     })
+    .catch(err => {
+      console.error(err);
+      return err;
+    });
   }
 
+  /**
+   * Create a webhook manually
+   * @param {String} topic A supported Webhook topic
+   * @param {Object} options 
+   * options fields:
+   *  {String} query: a query string to append to a Twitch endpoint
+   *  {String} mode: 'subscribe' or 'unsubscribe' (Default: 'subscribe')
+   *  {Object} Header: Additional headers to append to the request
+   */
   webhook(topic, options = {}) {
-    const callback = URL.format(`${this.callback_url}/${topic.toLowerCase()}`);
+    const callback = `${this.callback_url}/${topic.toLowerCase()}`;
     const topicUrl = this.webhook_endpoints[topic];
     const query = (options.query) ? options.query : '';
     const fullTopicUrl = `${topicUrl}${query}`;
@@ -274,7 +292,7 @@ class TwitchListener extends EventEmitter {
       'hub.mode': mode,
       'hub.topic': fullTopicUrl,
       'hub.lease_seconds': this.webhook_duration,
-      'secret': this.hub_secret
+      'hub.secret': this.hub_secret
     });
 
     return new Promise((resolve, reject) => {
@@ -323,7 +341,11 @@ class TwitchListener extends EventEmitter {
   }
 
   /**
-   * 
+   * Create a follow webhook for the username provided in the configuration
+   * Listen to 'add_webhook_follow' for true confirmation for a webhook's creation
+   * Listen to 'remove_webhook_follow' for true confirmation for a webhook's deletion
+   * These are emitted once Twitch's challenge request has been accepted by this application
+   * @returns {Promise}
    */
   followWebhook(mode = 'subscribe') {
     return this.requestUserInfo()
@@ -336,19 +358,20 @@ class TwitchListener extends EventEmitter {
     });
   }
 
-  subscriptionWebhook(mode = 'subscribe') {
-    return Promise.all([
-      this.requestUserInfo(),
-      this.requestAccessToken()
-    ])
-    .then(results => {
-      const id = results[0].id;
+  _subscriptionWebhook(mode = 'subscribe') {
+    let accessToken = null;
+    this.requestAccessToken()
+    .then(token => {
+      accessToken = token;
+      return this.requestUserInfo();
+    })
+    .then(info => {
       return this.webhook('subscription', {
         mode: mode,
         header: {
-          'Authorization': `Bearer ${results[1]}`
+          'Authorization': `Bearer ${accessToken}`
         },
-        query: `?broadcaster_id=${id}&first=1`
+        query: `?broadcaster_id=${info.id}&first=1`
       });
     });
   }
@@ -375,81 +398,44 @@ class TwitchListener extends EventEmitter {
     });
   }
 
-  extensionTransactionWebhook() {
-    return new Promise((resolve, reject) => {
-      console.warn('subscribeToExtensionTransaction is not yet implemented');
-      resolve();
+  _extensionTransactionWebhook(mode = 'subscribe') {
+    let accessToken = null;
+    this.requestAccessToken()
+    .then(token => {
+      accessToken = token;
+      return this.requestUserExtensions();
+    })
+    .then(extensions => {
+      if ( !extensions.length ) {
+        return;
+      }
+      const promises = [];
+      for ( let i = 0; i < extensions.length; ++i ) {
+        ((extension) => {
+          promises.push(this.webhook('extensionTransaction', {
+            mode: mode,
+            header: {
+              'Authorization': `Bearer ${accessToken}`
+            },
+            query: `?extension_id=${extension.id}&first=1`
+          }))
+        })(extensions[i]);
+      }
+      return Promise.all(promises);
     });
   }
 
-  moderatorChangeWebhook() {
+  _moderatorChangeWebhook() {
     return new Promise((resolve, reject) => {
       console.warn('subscribeToModeratorChange is not yet implemented');
       resolve();
     });
   }
 
-  banChangeWebhook() {
+  _banChangeWebhook() {
     return new Promise((resolve, reject) => {
       console.warn('subscribeToBanChange is not yet implemented');
       resolve();
-    });
-  }
-
-  /**
-   * Performs a sequence of operations to retrieve a valid access token
-   * 1. Checks if this.token_path has a valid token
-   * 2. Otherwise retrieves a new token from from the server
-   * 3. Stores the token at this.token_path
-   * Invalid existing tokens will also be revoked through the Twitch API
-   * @returns {Promise}
-   * Resolves with a String
-   * Rejects with an Error
-   */
-  requestAccessToken() {
-    return new Promise((resolve, reject) => {
-      // Retrieve an existing token from this.token_path
-      const obj = this.readAccessToken();
-      const accessToken = this.parseToken(obj);
-
-      // Check validity of accessToken
-      this.validateAccessToken(accessToken)
-      .then(isValid => {
-        if ( accessToken ) {
-          // Return the token if it exists and is still valid
-          if ( isValid ) {
-            return resolve(accessToken);
-          }
-
-          // Revoke access token rights if it is no longer valid
-          this.revokeAccessToken(accessToken);
-        }
-
-        // Request a new access token
-        return this.request({
-          url: 'https://id.twitch.tv/oauth2/token',
-          method: 'POST',
-          headers: {},
-          qs: {
-            client_id: this.client_id,
-            client_secret: this.client_secret,
-            grant_type: 'client_credentials',
-            scope: 'openid',
-          }
-        });
-      })
-      .then(res => {
-        // Save the new access token for future reference
-        this.saveAccessToken(res.body);
-        const newToken = this.parseToken(res.body);
-        if ( newToken ) {
-          return newToken;
-        }
-        else {
-          return reject(new Error(`Could not parse an access token from ${res.body}`));
-        }
-      })
-      .catch(err => reject(err));
     });
   }
 
@@ -494,6 +480,35 @@ class TwitchListener extends EventEmitter {
   }
 
   /**
+   * Retrieve a list of extensions used by the user associated with the access token
+   * @returns {Promise}
+   * Resolves with an array containing all of the users exensions
+   * Rejects with an error
+   */
+  _requestUserExtensions() {
+    return new Promise((resolve, reject) => {
+      this.requestAccessToken()
+      .then(token => this.request({
+        url: 'https://api.twitch.tv/helix/users/extensions/list',
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }))
+      .then(res => {
+        console.log(res.body);
+        try {
+          return resolve(JSON.parse(res.body));
+        }
+        catch(err) {
+          return reject(err);
+        }
+      })
+      .catch(err => reject(err));
+    });
+  }
+
+  /**
    * Request active webhooks on the application
    * @returns {Promise}
    */
@@ -513,6 +528,64 @@ class TwitchListener extends EventEmitter {
         }
         catch(err) {
           return reject(err);
+        }
+      })
+      .catch(err => reject(err));
+    });
+  }
+
+  /**
+   * TODO: Refactor procedure to procure User Access Tokens instead of App Access Tokens
+   * Performs a sequence of operations to retrieve a valid access token
+   * 1. Checks if this.token_path has a valid token
+   * 2. Otherwise retrieves a new token from from the server
+   * 3. Stores the token at this.token_path
+   * Invalid existing tokens will also be revoked through the Twitch API
+   * @returns {Promise}
+   * Resolves with a String
+   * Rejects with an Error
+   */
+  requestAccessToken() {
+    return new Promise((resolve, reject) => {
+      // Retrieve an existing token from this.token_path
+      const obj = this.readAccessToken();
+      const accessToken = this.parseToken(obj);
+
+      // Check validity of accessToken
+      this.validateAccessToken(accessToken)
+      .then(isValid => {
+        if ( accessToken ) {
+          // Return the token if it exists and is still valid
+          if ( isValid ) {
+            return resolve(accessToken);
+          }
+
+          // Revoke access token rights if it is no longer valid
+          this.revokeAccessToken(accessToken);
+        }
+
+        // Request a new access token
+        return this.request({
+          url: 'https://id.twitch.tv/oauth2/token',
+          method: 'POST',
+          headers: {},
+          qs: {
+            client_id: this.client_id,
+            client_secret: this.client_secret,
+            grant_type: 'client_credentials',
+            scope: 'openid user:read:broadcast analytics:read:extensions analytics:read:games bits:read channel:read:subscriptions user:read:email',
+          }
+        });
+      })
+      .then(res => {
+        // Save the new access token for future reference
+        this.saveAccessToken(res.body);
+        const newToken = this.parseToken(res.body);
+        if ( newToken ) {
+          return newToken;
+        }
+        else {
+          return reject(new Error(`Could not parse an access token from ${res.body}`));
         }
       })
       .catch(err => reject(err));
