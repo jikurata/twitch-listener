@@ -1,6 +1,4 @@
 node_modules/
 .env
-test/cred.json
-test/test.json
-test/token.json
-cred.json
+test/*.json
+/cred.json

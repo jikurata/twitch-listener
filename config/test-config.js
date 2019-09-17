@@ -16,8 +16,6 @@ Object.keys(config).forEach(key => testConfigWebhook[key] = config[key]);
 testConfigWebhook.token_path = 'test/cred.json';
 testConfigWebhook.webhook_duration = 60;
 
-module.exports = {
-  'testConfigFS': testConfigFS,
-  'testConfigAccessToken': testConfigAccessToken,
-  'testConfigWebhook': testConfigWebhook
-};
+module.exports.testConfigFS = testConfigFS;
+module.exports.testConfigAccessToken = testConfigAccessToken;
+module.exports.testConfigWebhook = testConfigWebhook;
