@@ -1,6 +1,6 @@
 #TwitchListener v0.0.0
 Create and listen to Twtich webhooks
-##Usage
+## Usage
 ```
 const TwitchListener = require('./src/TwitchListener.js');
 const config = require('./config/config.js');

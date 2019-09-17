@@ -90,26 +90,71 @@ subscriptionTestConfig.webhook_duration = 60;
   .expect('revokeAccessToken').toBeTruthy();
 // =====
 
-// Twitch webhook test
+
+const webhookTestListener = new TwitchListener(subscriptionTestConfig)
+webhookTestListener.launch()
+.then(() => {
+  // Twitch follow webhook test
   Taste.flavor('Register and unregister a follow webhook')
-  .describe('Request to create a webhook on the user/follow api')
+  .describe('Create and remove a follow webhook')
   .test(() => {
-    const listener = new TwitchListener(subscriptionTestConfig)
-    listener.on('add_webhook_follow', () => {
-      Taste.profile.webhookAddResult = true;
-      listener.followWebhook('unsubscribe');
+    webhookTestListener.on('add_webhook_follow', () => {
+      Taste.profile.webhookFollowAddResult = true;
+      webhookTestListener.followWebhook('unsubscribe');
     });
-    listener.on('remove_webhook_follow', () => {
-      Taste.profile.webhookRemoveResult = true;
-      listener.close();
+    webhookTestListener.on('remove_webhook_follow', () => {
+      Taste.profile.webhookFollowRemoveResult = true;
     });
-    listener.launch()
-    .then(() => listener.followWebhook())
+    webhookTestListener.followWebhook()
     .catch(err => {
-      Taste.profile.webhookAddResult = err;
-      Taste.profile.webhookRemoveResult = err;
+      Taste.profile.webhookFollowAddResult = err;
+      Taste.profile.webhookFollowRemoveResult = err;
     });
   })
-  .expect('webhookAddResult').toBe(true)
-  .expect('webhookRemoveResult').toBe(true);
-// =====
+  .expect('webhookFollowAddResult').toBe(true)
+  .expect('webhookFollowRemoveResult').toBe(true);
+  // =====
+
+  // Twitch change stream webhook test
+  Taste.flavor('Register and unregister a change stream webhook')
+  .describe('Create and remove a change stream webhook')
+  .test(() => {
+    webhookTestListener.on('add_webhook_changeStream', () => {
+      Taste.profile.webhookChangeStreamAddResult = true;
+      webhookTestListener.changeStreamWebhook('unsubscribe');
+    });
+    webhookTestListener.on('remove_webhook_changeStream', () => {
+      Taste.profile.webhookChangeStreamRemoveResult = true;
+    });
+    webhookTestListener.changeStreamWebhook()
+    .catch(err => {
+      Taste.profile.webhookChangeStreamAddResult = err;
+      Taste.profile.webhookChangeStreamRemoveResult = err;
+    });
+  })
+  .expect('webhookChangeStreamAddResult').toBe(true)
+  .expect('webhookChangeStreamRemoveResult').toBe(true);
+  // =====
+
+  // Twitch change profile webhook test
+  Taste.flavor('Register and unregister a change profile webhook')
+  .describe('Create and remove a change profile webhook')
+  .test(() => {
+    webhookTestListener.on('add_webhook_changeProfile', () => {
+      Taste.profile.webhookChangeProfileAddResult = true;
+      webhookTestListener.changeProfileWebhook('unsubscribe');
+    });
+    webhookTestListener.on('remove_webhook_changeProfile', () => {
+      Taste.profile.webhookChangeProfileRemoveResult = true;
+      webhookTestListener.close();
+    });
+    webhookTestListener.changeProfileWebhook()
+    .catch(err => {
+      Taste.profile.webhookChangeProfileAddResult = err;
+      Taste.profile.webhookChangeProfileRemoveResult = err;
+    });
+  })
+  .expect('webhookChangeProfileAddResult').toBe(true)
+  .expect('webhookChangeProfileRemoveResult').toBe(true);
+  // =====
+});
