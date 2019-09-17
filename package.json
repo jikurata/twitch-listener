@@ -1,14 +1,18 @@
 {
-  "name": "twitch-webhook-test",
+  "name": "twitch-listener",
   "version": "0.0.0",
-  "description": "",
+  "description": "Create and listen to Twitch webhooks",
   "main": "index.js",
   "scripts": {
     "revokeToken": "node ./script/revoke-token.js",
     "test": "node ./test/TwitchListener.test.js",
     "launch": "node app.js"
   },
-  "keywords": [],
+  "keywords": [
+    "twitch",
+    "webhook",
+    "subscribe"
+  ],
   "author": "jikurata",
   "license": "ISC",
   "dependencies": {
